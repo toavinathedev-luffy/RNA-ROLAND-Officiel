@@ -5,66 +5,79 @@ from tkinter import ttk, messagebox, Toplevel
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-# Henon function parameters
-a = 1.4
-b = 0.3
+class HenonMap:
+    def __init__(self, a=1.4, b=0.3):
+        self.a = a
+        self.b = b
 
-# Generate Henon data
-def henon(x, y):
-    return 1 - a * x * x + y, b * x
+    def generate_data(self, n_points, x0=0, y0=0):
+        x, y = x0, y0
+        data = []
+        for _ in range(n_points):
+            x, y = self.henon(x, y)
+            data.append((x, y))
+        return data
 
-# Initialize neural network weights
-def initialize_weights(input_size, hidden_size, output_size):
-    return (
-        [[random.uniform(-1, 1) for _ in range(input_size)] for _ in range(hidden_size)],
-        [[random.uniform(-1, 1) for _ in range(hidden_size)] for _ in range(output_size)]
-    )
+    def henon(self, x, y):
+        return 1 - self.a * x * x + y, self.b * x
 
-# Sigmoid activation function
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
+class NeuralNetwork:
+    def __init__(self, input_size, hidden_size, output_size, learning_rate=0.1):
+        self.learning_rate = learning_rate
+        self.weights_input_hidden = [[random.uniform(-1, 1) for _ in range(input_size)] for _ in range(hidden_size)]
+        self.weights_hidden_output = [[random.uniform(-1, 1) for _ in range(hidden_size)] for _ in range(output_size)]
 
-# Sigmoid derivative
-def sigmoid_derivative(x):
-    return x * (1 - x)
+    def sigmoid(self, x):
+        return 1 / (1 + math.exp(-x))
 
-# Mean Squared Error (MSE) function
-def mean_squared_error(predictions, targets):
-    return sum((p - t) ** 2 for p, t in zip(predictions, targets)) / len(predictions)
+    def sigmoid_derivative(self, x):
+        return x * (1 - x)
 
-# Feedforward function
-def feedforward(inputs, weights_input_hidden, weights_hidden_output):
-    hidden_layer_activation = [sigmoid(sum(inputs[j] * weights_input_hidden[i][j] for j in range(len(inputs)))) for i in range(len(weights_input_hidden))]
-    output_layer_activation = [sigmoid(sum(hidden_layer_activation[j] * weights_hidden_output[i][j] for j in range(len(hidden_layer_activation)))) for i in range(len(weights_hidden_output))]
-    return hidden_layer_activation, output_layer_activation
+    def mean_squared_error(self, predictions, targets):
+        return sum((p - t) ** 2 for p, t in zip(predictions, targets)) / len(predictions)
 
-# Backpropagation function
-def backpropagate(inputs, expected_output, hidden_layer_activation, output_layer_activation, weights_input_hidden, weights_hidden_output, learning_rate):
-    output_error = [expected_output[i] - output_layer_activation[i] for i in range(len(expected_output))]
-    output_delta = [output_error[i] * sigmoid_derivative(output_layer_activation[i]) for i in range(len(output_error))]
-    hidden_error = [sum(output_delta[j] * weights_hidden_output[j][i] for j in range(len(output_delta))) for i in range(len(hidden_layer_activation))]
-    hidden_delta = [hidden_error[i] * sigmoid_derivative(hidden_layer_activation[i]) for i in range(len(hidden_error))]
+    def feedforward(self, inputs):
+        hidden_layer_activation = [self.sigmoid(sum(inputs[j] * self.weights_input_hidden[i][j] for j in range(len(inputs)))) for i in range(len(self.weights_input_hidden))]
+        output_layer_activation = [self.sigmoid(sum(hidden_layer_activation[j] * self.weights_hidden_output[i][j] for j in range(len(hidden_layer_activation)))) for i in range(len(self.weights_hidden_output))]
+        return hidden_layer_activation, output_layer_activation
 
-    # Update weights
-    for i in range(len(weights_hidden_output)):
-        for j in range(len(weights_hidden_output[i])):
-            weights_hidden_output[i][j] += learning_rate * output_delta[i] * hidden_layer_activation[j]
-    
-    for i in range(len(weights_input_hidden)):
-        for j in range(len(weights_input_hidden[i])):
-            weights_input_hidden[i][j] += learning_rate * hidden_delta[i] * inputs[j]
+    def backpropagate(self, inputs, expected_output, hidden_layer_activation, output_layer_activation):
+        output_error = [expected_output[i] - output_layer_activation[i] for i in range(len(expected_output))]
+        output_delta = [output_error[i] * self.sigmoid_derivative(output_layer_activation[i]) for i in range(len(output_error))]
+        hidden_error = [sum(output_delta[j] * self.weights_hidden_output[j][i] for j in range(len(output_delta))) for i in range(len(hidden_layer_activation))]
+        hidden_delta = [hidden_error[i] * self.sigmoid_derivative(hidden_layer_activation[i]) for i in range(len(hidden_error))]
 
-# Predict for multiple steps
-def predict(steps, x, y, weights_input_hidden, weights_hidden_output):
-    predictions = []
-    for _ in range(steps):
-        inputs = [x, y]
-        _, output = feedforward(inputs, weights_input_hidden, weights_hidden_output)
-        predictions.append(output)
-        x, y = output
-    return predictions
+        # Update weights
+        for i in range(len(self.weights_hidden_output)):
+            for j in range(len(self.weights_hidden_output[i])):
+                self.weights_hidden_output[i][j] += self.learning_rate * output_delta[i] * hidden_layer_activation[j]
 
-# Tkinter interface
+        for i in range(len(self.weights_input_hidden)):
+            for j in range(len(self.weights_input_hidden[i])):
+                self.weights_input_hidden[i][j] += self.learning_rate * hidden_delta[i] * inputs[j]
+
+    def train(self, training_data, epochs):
+        error_history = []
+        for epoch in range(epochs):
+            epoch_error = 0
+            for x, y in training_data:
+                inputs = [x, y]
+                expected_output = HenonMap().henon(x, y)
+                hidden_layer_activation, output_layer_activation = self.feedforward(inputs)
+                self.backpropagate(inputs, expected_output, hidden_layer_activation, output_layer_activation)
+                epoch_error += self.mean_squared_error(output_layer_activation, expected_output)
+            error_history.append(epoch_error / len(training_data))
+        return error_history
+
+    def predict(self, steps, x, y):
+        predictions = []
+        for _ in range(steps):
+            inputs = [x, y]
+            _, output = self.feedforward(inputs)
+            predictions.append(output)
+            x, y = output
+        return predictions
+
 class HenonApp:
     def __init__(self, root):
         self.root = root
@@ -77,11 +90,9 @@ class HenonApp:
         self.epochs = 1000
         self.prediction_steps = 3
 
-        # Initialize weights
-        self.input_size = 2
-        self.hidden_size = 2
-        self.output_size = 2
-        self.weights_input_hidden, self.weights_hidden_output = initialize_weights(self.input_size, self.hidden_size, self.output_size)
+        # Initialize Henon map and neural network
+        self.henon_map = HenonMap()
+        self.neural_network = NeuralNetwork(input_size=2, hidden_size=2, output_size=2, learning_rate=self.learning_rate)
 
         # Training data and error history
         self.training_data = []
@@ -99,7 +110,7 @@ class HenonApp:
             ("Prédire 10 pas", lambda: self.predict(10)),
             ("Prédire 20 pas", lambda: self.predict(20)),
         ]
-        
+
         for idx, (text, command) in enumerate(buttons):
             button = ttk.Button(self.root, text=text, command=command)
             button.grid(row=0, column=idx, padx=10, pady=10)
@@ -121,37 +132,20 @@ class HenonApp:
         self.error_canvas.get_tk_widget().grid(row=3, column=0, columnspan=5)
 
     def generate_data(self):
-        self.training_data = []
-        x, y = self.x0, self.y0
-        for _ in range(self.n_points):
-            x, y = henon(x, y)
-            self.training_data.append((x, y))
-
+        self.training_data = self.henon_map.generate_data(self.n_points, self.x0, self.y0)
         self.ax.clear()
         self.ax.scatter(*zip(*self.training_data), color='green', marker='o', s=2)
         self.canvas.draw()
 
     def train_model(self):
-        self.error_history = []
-        for epoch in range(self.epochs):
-            epoch_error = 0
-            for x, y in self.training_data:
-                inputs = [x, y]
-                expected_output = henon(x, y)
-                hidden_layer_activation, output_layer_activation = feedforward(inputs, self.weights_input_hidden, self.weights_hidden_output)
-                backpropagate(inputs, expected_output, hidden_layer_activation, output_layer_activation, self.weights_input_hidden, self.weights_hidden_output, self.learning_rate)
-                epoch_error += mean_squared_error(output_layer_activation, expected_output)
-            
-            self.error_history.append(epoch_error / len(self.training_data))
-        
+        self.error_history = self.neural_network.train(self.training_data, self.epochs)
         self.update_error_plot()
         message = "Entraînement terminé !"
         self.prediction_value.config(text=message)
         messagebox.showinfo("Information", message)
 
     def predict(self, steps):
-        x, y = self.x0, self.y0
-        predictions = predict(steps, x, y, self.weights_input_hidden, self.weights_hidden_output)
+        predictions = self.neural_network.predict(steps, self.x0, self.y0)
         self.ax.clear()
         self.ax.scatter(*zip(*self.training_data), color='green', marker='o', s=2)
         self.ax.scatter(*zip(*predictions), color='red', marker='o', s=2)
@@ -193,7 +187,6 @@ class HenonApp:
         self.error_ax.set_ylabel('Erreur')
         self.error_ax.legend()
         self.error_canvas.draw()
-
 
 if __name__ == "__main__":
     root = tk.Tk()
